@@ -1,0 +1,33 @@
+--@name Vertex Color
+--@author Name
+--@client
+
+local chip, owner, player = chip(), owner(), player()
+
+local verts = {
+    { pos = Vector(0, 0) },
+    { pos = Vector(1, 1) },
+    { pos = Vector(0, 1) },
+    { pos = Vector(0, 0) },
+    { pos = Vector(1, 0) },
+    { pos = Vector(1, 1) },
+}
+local colors = { 0, 180, 90, 0, 270, 180 }
+
+hook.add("render", "", function()
+    local ct = timer.curtime()
+    for i, v in ipairs(verts) do
+        v.color = Color((colors[i] + ct * 100) % 360, 1, 1):hsvToRGB()
+    end
+    local msh = mesh.createFromTable(verts)
+    
+    local m = Matrix()
+    m:setScale(Vector(512))
+    render.pushMatrix(m)
+        render.setMaterial()
+        render.setColor(Color(255,255,255))
+        msh:draw()
+    render.popMatrix()
+    
+    msh:destroy()
+end)
