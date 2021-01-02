@@ -1,8 +1,8 @@
 --@name Hoverbike
 --@author Name
 --@shared
---@include ../data/model/hoverbike.obj
---@include ../data/texture/hoverbike.b64
+--@include model.obj
+--@include texture.txt
 
 local holoMesh
 
@@ -297,8 +297,8 @@ else
     net.start("holomesh") net.send()
     
     -- Location of model and texture
-    local importedMesh = require("../data/model/hoverbike.obj")
-    local importedTexture = require("../data/texture/hoverbike.b64")
+    local importedMesh = require("model.obj")
+    local importedTexture = require("texture.txt")
     
     -- Setting up the texture
     objTexture:setTextureURL("$basetexture", importedTexture)
