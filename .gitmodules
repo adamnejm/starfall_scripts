@@ -1,0 +1,6 @@
+[submodule "fork/sevii"]
+	path = fork/sevii
+	url = git@github.com:DaDamRival/starfall_scripts.git
+[submodule "fork/sparky"]
+	path = fork/sparky
+	url = git@github.com:thegrb93/MyStarfallScripts.git
