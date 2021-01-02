@@ -1,0 +1,177 @@
+--@name Pushlines
+--@author Name
+--@shared
+
+local chip, owner, lplayer, world = chip(), owner(), player(), entity(0)
+
+-------------------------------------------
+
+if CLIENT then
+    
+    local fps = 60
+    local speed = 30
+    local blurring = false
+    
+    local pos_min, pos_max = 256, 768
+    local ang_min, ang_max = -180, 180
+    local size_min, size_max = 2, 10
+    local spacing_min, spacing_max = 10, 45
+    
+    local bar_color = Color(0, 0, 0)
+    local line_color = Color(255, 255, 255)
+    
+    local margin = 128
+    local line_length = 2048
+    local mask_height = 2048
+    
+    local color_white = Color(255, 255, 255)
+    local color_black = Color(0, 0, 0)
+    
+    -------------------------------------------
+    
+    local function drawLine(pos, ang, size, hue)
+        local m = Matrix()
+        m:translate(pos)
+        m:rotate(ang)
+        
+        render.pushMatrix(m)
+            render.setColor(line_color)
+            render.drawRect(-size / 2, -line_length / 2, size, line_length)
+        render.popMatrix()
+    end
+    
+    local function drawMask(pos, ang, swap)
+        local m = Matrix()
+        m:translate(pos)
+        m:rotate(ang)
+        
+        render.pushMatrix(m)
+            render.setColor(color_white)
+            render.drawRect(swap and -mask_height or 0, -line_length / 2, mask_height, line_length)
+        render.popMatrix()
+    end
+    
+    local function pushStencilMask()
+        render.setStencilWriteMask(0xFF)
+        render.setStencilTestMask(0xFF)
+        render.setStencilReferenceValue(0)
+        render.setStencilCompareFunction(STENCIL.ALWAYS)
+        render.setStencilPassOperation(STENCIL.KEEP)
+        render.setStencilFailOperation(STENCIL.KEEP)
+        render.setStencilZFailOperation(STENCIL.KEEP)
+        render.clearStencil()
+        
+        render.setStencilEnable(true)
+        
+        render.setStencilReferenceValue(1)
+        render.setStencilCompareFunction(STENCIL.EQUAL)
+        render.setStencilFailOperation(STENCIL.REPLACE)
+    end
+    
+    local function pushStencilTarget(invert)
+        render.setStencilCompareFunction(invert and STENCIL.EQUAL or STENCIL.NOTEQUAL)
+        render.setStencilFailOperation(STENCIL.KEEP)
+    end
+    
+    local function popStencil()
+        render.setStencilEnable(false)
+    end
+    
+    -------------------------------------------
+    
+    render.createRenderTarget("main")
+    
+    render.createRenderTarget("left")
+    render.createRenderTarget("right")
+    local side = { "left", "right" }
+    local offset = { 1, -1 }
+    
+    -------------------------------------------
+    
+    local pos, ang, size, spacing
+    local function randomizeBar()
+        pos = Vector(math.random(pos_min, pos_max), math.random(pos_min, pos_max))
+        ang = Angle(0, math.random(ang_min, ang_max), 0)
+        size = math.random(size_min, size_max)
+        spacing = math.random(spacing_min, spacing_max)
+    end
+    randomizeBar()
+    
+    -------------------------------------------
+    
+    local t = 0
+    local last_update = 0
+    hook.add("Render", "", function()
+        if timer.curtime() > last_update then
+            last_update = timer.curtime() + 1/fps
+            t = t + timer.frametime() * speed
+            
+            -- New bar
+            if t > 1 then
+                t = 0
+                randomizeBar()
+                
+                for i = 1, 2 do
+                    render.selectRenderTarget(side[i])
+                        render.setColor(color_white)
+                        render.setRenderTargetTexture("main")
+                        render.drawTexturedRect(0, 0, 1024, 1024)
+                    render.selectRenderTarget()
+                end
+            end
+            
+            -- Lines
+            for i = 1, 2 do
+                render.selectRenderTarget(side[i])
+                    drawLine(pos, ang, size * t)
+                render.selectRenderTarget()
+            end
+            
+            -- Parting
+            render.selectRenderTarget("main")
+                render.clear(bar_color)
+                
+                for i = 1, 2 do
+                    local m = Matrix()
+                    m:translate(ang:getForward() * spacing * t * offset[i])
+                    
+                    render.pushMatrix(m)
+                        pushStencilMask()
+                            drawMask(pos, ang, i == 1)
+                        pushStencilTarget()
+                            if not blurring then
+                                render.setFilterMag(1)
+                            end
+                                render.setColor(color_white)
+                                render.setRenderTargetTexture(side[i])
+                                render.drawTexturedRect(0, 0, 1024, 1024)
+                            render.setFilterMag(0)
+                        popStencil()
+                    render.popMatrix()
+                end
+            render.selectRenderTarget()
+        end
+        
+        render.setColor(color_white)
+        render.setRenderTargetTexture("main")
+        render.drawTexturedRect(-margin, -margin, 512+margin, 512+margin)
+    end)
+    
+else
+    local ent = chip:isWeldedTo()
+    if ent and ent:getClass() == "starfall_screen" then
+        ent:linkComponent(chip)
+    end
+end
+
+
+
+
+
+
+
+
+
+
+
+

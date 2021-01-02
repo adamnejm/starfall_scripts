@@ -1,0 +1,314 @@
+--@name Hoverbike
+--@author Name
+--@shared
+--@include ../data/model/hoverbike.obj
+--@include ../data/texture/hoverbike.b64
+
+local holoMesh
+
+local function angnorm(tbl)
+    return Angle((tbl[1] + 180) % 360 - 180, (tbl[2] + 180) % 360 - 180, (tbl[3] + 180) % 360 - 180)
+end
+
+if SERVER then
+    
+    local moveSpeed   = 13000      -- Forward/backward speed
+    local turnSpeed   = 20000      -- Turning speed
+    local breaksForce = 5          -- Force of the breaks (Space)
+    local breaksLoss  = 30         -- How fast to lose speed while using breaks
+    local breaksTurn  = 2          -- Breaks turning speed multiplier
+    local nitroMul    = 1.75        -- Nitro (Shift) speed multiplier
+    local nitroAmount = 300       -- Amount of the nitro
+    local nitroRegen  = 0.5          -- How fast does nitro regenerate
+    local nitroHalt   = 3          -- Time to wait before nitro starts regenerating
+    
+    chip = chip()
+    
+    plate = prop.create(chip:getPos() + chip:getUp()*30, chip:getAngles(), "models/sprops/cuboids/height12/size_3/cube_36x96x12.mdl", true)
+    plate:setMass(100)
+    plate:enableGravity(false)
+    plate:setColor(Color(255,255,255,0))
+    
+    seat = prop.createSent(plate:localToWorld(Vector(-40,0,10)) + plate:getForward(), plate:localToWorldAngles(Angle(0,270,-25)), "Seat_Airboat", false)
+    seat:setParent(plate)
+    seat:setColor(Color(255,255,255,0))
+    
+    // Gauges
+    local speedGauge = holograms.create(plate:localToWorld(Vector(5,3,15.9)), plate:localToWorldAngles(Angle(-66.5,-195,15)), "models/sprops/trans/misc/gauge_3.mdl", Vector(1))
+    speedGauge:setColor(Color(128,0,255))
+    speedGauge:setParent(plate)
+    speedGauge:setSkin(4)
+    
+    local speedGaugeP = holograms.create(speedGauge:localToWorld(Vector(1,0,0)), speedGauge:localToWorldAngles(Angle(0,0,0)), "models/sprops/cuboids/height06/size_1/cube_6x6x6.mdl", Vector(0.1))
+    speedGaugeP:setParent(speedGauge)
+    
+    local speedGaugeP1 = holograms.create(speedGaugeP:localToWorld(Vector(0,0,-1.6)), speedGaugeP:localToWorldAngles(Angle(0,0,0)), "models/sprops/cuboids/height06/size_1/cube_6x6x6.mdl", Vector(0.05,0.05,0.5))
+    speedGaugeP1:setParent(speedGaugeP)
+    
+    
+    local nitroGauge = holograms.create(plate:localToWorld(Vector(1.9,-4.7,14.9)), plate:localToWorldAngles(Angle(-66.5,-162,-18)), "models/sprops/trans/misc/gauge_3.mdl", Vector(0.4))
+    nitroGauge:setColor(Color(128,0,255))
+    nitroGauge:setParent(plate)
+    nitroGauge:setSkin(6)
+    
+    local nitroGaugeP = holograms.create(nitroGauge:localToWorld(Vector(0.4,0,0)), nitroGauge:localToWorldAngles(Angle(0,0,-37)), "models/sprops/cuboids/height06/size_1/cube_6x6x6.mdl", Vector(0.04))
+    nitroGaugeP:setParent(nitroGauge)
+    
+    local nitroGaugeP1 = holograms.create(nitroGaugeP:localToWorld(Vector(0,0,-0.6)), nitroGaugeP:localToWorldAngles(Angle(0,0,0)), "models/sprops/cuboids/height06/size_1/cube_6x6x6.mdl", Vector(0.02,0.02,0.2))
+    nitroGaugeP1:setParent(nitroGaugeP)
+    
+    
+    // MODEL
+    
+    holoMesh = holograms.create(plate:localToWorld(Vector(-5,0,0)), plate:localToWorldAngles(Angle(0,90,0)), "models/Combine_Helicopter/helicopter_bomb01.mdl")
+    holoMesh:setParent(plate)
+    holoMesh:suppressEngineLighting(true)
+    
+    -- Send requested holo
+    hook.add("net","holomesh",function(name, len, ply)
+        net.start("holomesh")
+        net.writeEntity(holoMesh)
+        net.send(ply)
+    end)
+    
+    
+    driver = nil
+    
+    
+    local obb = plate:obbSize()
+    edges = {
+        Vector(obb.x/2, obb.y/2, 0), //F L
+        Vector(obb.x/2, -obb.y/2, 0), //F R
+        Vector(-obb.x/2, obb.y/2, 0), //R L
+        Vector(-obb.x/2, -obb.y/2, 0) //R R
+    }
+    
+    // Spawn holos on the edges
+    /*
+    holos = {}
+    for i,p in pairs(edges) do
+        holograms.create(plate:localToWorld(p), Angle(0), "models/sprops/cuboids/height06/size_1/cube_6x6x6.mdl", Vector(1)):setParent(plate)
+        holos[i] = holograms.create(plate:getPos(), Angle(0), "models/sprops/rectangles/size_1_5/rect_6x6x3.mdl", Vector(1))
+    end
+    
+    /*holos[1]:setColor(Color(255,0,0)) //Front Left
+    holos[2]:setColor(Color(0,255,0)) //Front Right
+    holos[3]:setColor(Color(0,0,255)) // Rear Left
+    holos[4]:setColor(Color(0,255,255)) // Rear Right
+    */
+    
+    local trPos = {}
+    local onGround
+    local lastpos = Vector()
+    // Physics update on 'think'
+    function update()
+        
+        local tarpos = Vector()
+        local hitnorm = Vector()
+        
+        onGround = 0
+        onSlope = 0
+        for i,p in pairs(edges) do
+            local tr = trace.trace(plate:localToWorld(p), plate:localToWorld(p) - plate:getUp()*80, {plate, chip}, 4294967295)
+            //holos[i]:setPos(tr.HitPos)
+            
+            local slope = tr.HitNormal.z < 0.7 and 1 or 0
+            onSlope = onSlope + slope
+            
+            onGround = onGround + (tr.Hit and 1 or 0)
+            
+            
+            local hitpos
+            //init, hover
+            hitpos = ((tr.HitPos + plate:getUp()*40)*(1-tr.Fraction))
+            //counter-target
+            hitpos:add((plate:localToWorld(p))*(tr.Fraction))
+            //gravity
+            hitpos:sub(tr.Hit and Vector(0,0,0) or Vector(0,0,9.8))
+            //slope
+            hitpos:sub(Vector(0,0,5*onSlope*onGround))
+            
+            tarpos:add(hitpos)
+            hitnorm:add(tr.HitNormal)
+            
+            trPos[i] = tr.HitPos
+        end
+        
+        // Pos
+        
+        tarpos:div(4)
+        tarpos:sub(plate:getPos())
+        
+        hitnorm:div(4)
+        
+        onGround = onGround /4
+        onSlope = onSlope /4
+        
+        local slope = math.abs(hitnorm.x)+math.abs(hitnorm.y)
+        
+        local delta = tarpos - lastpos
+        local force = (tarpos + delta*5)*plate:getMass() - ((plate:getVelocity()*5)*onGround)
+        
+        lastpos = tarpos
+        
+        plate:applyForceCenter(force)
+        
+        
+        // Angle
+        local tarang, ang
+        
+        local yaw = plate:getAngles().yaw
+        
+        if onGround > 0 then
+            local pitch = ((trPos[1] + trPos[2])/2 - (trPos[3] + trPos[4])/2):getAngle().pitch
+            local roll = ((trPos[2] + trPos[4])/2 - (trPos[1] + trPos[3])/2):getAngle().pitch
+            
+            tarang = (-plate:getAngles() + Angle(pitch, yaw, roll))
+            tarang = angnorm(tarang)
+            
+            ang = (tarang*20 - plate:getAngleVelocityAngle()*5)*plate:getInertia():getLength()*onGround
+            
+        else
+        
+            tarang = (-plate:getAngles() + Angle(0, yaw, 0))/5
+            tarang = angnorm(tarang)
+            
+            ang = (tarang*20 - plate:getAngleVelocityAngle()*5)*plate:getInertia():getLength()
+        end
+        
+        plate:applyAngForce(ang)
+        
+        // Other
+        steering()
+        gauges()
+    end
+    
+    
+    local forwardSpeed = 0
+    local forwardTarget = 0
+    
+    local rotationSpeed = 0
+    local rotationTarget = 0
+    
+    local mul = 0
+    local nitro = nitroAmount
+    local regen = false
+    
+    function steering()
+        if not driver then return end
+        
+        if onGround < 1 then mul = 0.3 else mul = 1 end
+        if onSlope > 0 and mul > 0.3 then mul = mul-(onSlope/3) end
+        
+        // Keys & speed values
+        local forwardTarget = driver:keyDown(IN_KEY.FORWARD) and moveSpeed*mul or driver:keyDown(IN_KEY.BACK) and -moveSpeed*mul or 0
+        local rotationTarget = driver:keyDown(IN_KEY.MOVELEFT) and turnSpeed*mul or driver:keyDown(IN_KEY.MOVERIGHT) and -turnSpeed*mul or 0
+        local breaks = driver:keyDown(IN_KEY.JUMP)
+        local shift = driver:keyDown(IN_KEY.SPEED) and nitro > 0 or false
+
+        // Nitro
+        if shift then
+            nitro = nitro - 1
+            regen = false
+            if not timer.exists("nitroHalt") then
+                timer.create("nitroHalt", 3, 1, nitroHalt)
+            else
+                timer.adjust("nitroHalt", 3, 1, nitroHalt)
+            end
+        end
+        
+        if (regen and nitro < nitroAmount) then
+            nitro = nitro + nitroRegen
+            if nitro > nitroAmount then nitro = nitroAmount end
+        end
+        
+        // Main steering
+        forwardSpeed = lerp(forwardSpeed, forwardTarget, 0.01)
+        rotationSpeed = lerp(rotationSpeed, rotationTarget, 0.08)
+        
+        local forwardForce = plate:getForward()*(forwardSpeed* (shift and forwardSpeed <= 0 and 0 and 0.3*mul or shift and nitroMul*mul or 1*mul))
+        local rotationForce = Angle(0,rotationSpeed,-rotationSpeed)
+        
+        // Breaks
+        if (breaks and onGround == 1) then
+            forwardTarget = moveSpeed/breaksLoss
+            forwardForce:sub(plate:getVelocity()*(breaks and breaksForce or 0))
+            rotationForce = rotationForce * breaksTurn
+        end
+        
+        plate:applyForceCenter(forwardForce)
+        plate:applyAngForce(rotationForce)
+        
+    end
+    
+    function nitroHalt()
+        regen = true 
+    end
+    
+    function gauges()
+        local speedGaugeAngle = ((plate:getVelocity():getLength() * 0.75) * 3600 / 63360) * 1.773
+        speedGaugeP:setAngles(speedGauge:localToWorldAngles(Angle(0,0,-speedGaugeAngle)))
+        
+        local nitroGaugeAngle = 37 + (nitro / nitroAmount * 283)
+        nitroGaugeP:setAngles(nitroGauge:localToWorldAngles(Angle(0,0,-nitroGaugeAngle)))
+    end
+    
+    function selectDriver(ply, veh)
+        if veh != seat then return end
+        driver = ply
+    end
+    
+    function checkDriver(ply, veh)
+        if veh != seat then return end
+        driver = nil
+    end
+    
+    function lerp (s, e, v)
+        return (1-v)*s+v*e
+    end
+    
+    
+    hook.add("think", "physics_update", update)
+    hook.add("PlayerEnteredVehicle", "select_driver", selectDriver)
+    hook.add("PlayerLeaveVehicle", "check_for_driver", checkDriver)
+    
+else
+    
+    local objMesh
+    local objTexture = material.create("VertexLitGeneric")
+    //render.createRenderTarget("mesh")
+    
+    -- Remesh hologram
+    function remeshHolo()
+        if not (holoMesh and objMesh) then return end
+        
+        holoMesh = holoMesh:toHologram()
+        
+        holoMesh:setMesh(objMesh["Plane"])
+        holoMesh:setMeshMaterial(objTexture)
+        holoMesh:setRenderBounds(Vector(-200),Vector(200))
+    end
+    
+    -- Request serverside hologram
+    hook.add("net", "holomesh", function(name, len, ply)
+        holoMesh = net.readEntity()
+        remeshHolo()
+    end)
+    net.start("holomesh") net.send()
+    
+    -- Location of model and texture
+    local importedMesh = require("../data/model/hoverbike.obj")
+    local importedTexture = require("../data/texture/hoverbike.b64")
+    
+    -- Setting up the texture
+    objTexture:setTextureURL("$basetexture", importedTexture)
+    objTexture:setTexture("$envmap", "env_cubemap")
+    objTexture:setTexture("$bumpmap", "sprops/trans/wheels/wheel_d_rim1")
+    
+    -- Creating mesh
+    local start = mesh.trianglesLeft()
+    objMesh = mesh.createFromObj(importedMesh)
+    print("Used "..(start-mesh.trianglesLeft()).." triangles")
+    remeshHolo()
+    
+end

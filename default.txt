@@ -1,0 +1,34 @@
+--@name Generic
+--@author Name
+--@
+
+local chip, owner, lplayer, world = chip(), owner(), player(), entity(0)
+
+-------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

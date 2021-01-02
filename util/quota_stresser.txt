@@ -1,0 +1,38 @@
+--@name Quota Stresser
+--@author Name
+--@shared
+
+local owner, lplayer, chip, world = owner(), player(), chip(), entity(0)
+
+----------------
+
+local sv_limit = 0.1
+local cl_limit = 0.2
+
+----------------
+
+if lplayer ~= owner then return end
+
+local limit = SERVER and sv_limit or cl_limit
+local cor = coroutine.wrap(function()
+    while true do
+        if quotaAverage() > quotaMax() * limit then
+            if not reached then
+                print((SERVER and "Server" or "Client") .." reached target: ".. limit)
+                reached = true
+            end
+            
+            coroutine.yield()
+        end
+    end
+end)
+
+hook.add("tick", "", cor)
+
+
+
+
+
+
+
+

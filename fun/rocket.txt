@@ -1,0 +1,239 @@
+    --@name Rocket
+    --@author adamnejm
+    --@shared
+    
+    local chip = chip()
+    local len = 30
+    local scale = 2.3
+    local height_scale = 0.2
+    
+    local owner_control = false
+    
+    local show_only_target = false
+    local show_always_owner = true
+    
+    
+    local holos = {}
+    
+    local function angNorm(ang)
+        for i = 1, 3 do ang[i] = math.normalizeAngle(ang[i]) end
+        return ang
+    end
+    
+    if SERVER then
+        
+        
+        
+        local parts = {}
+        for i = 0, len do
+            
+            local h = holograms.create(chip:getPos(), Angle(), "models/holograms/hq_cylinder.mdl", Vector(scale, scale, scale*height_scale))
+            //h:suppressEngineLighting(true)
+            h:setColor(Color(250,212,174))
+            h:setMaterial("sprops/textures/sprops_metal5")
+            
+            local s = holograms.create(chip:getPos() - Vector(0,0,6*scale*height_scale), Angle(), "models/holograms/hq_sphere.mdl", Vector(scale,scale,scale))
+            //s:suppressEngineLighting(true)
+            s:setColor(Color(250,212,174))
+            s:setMaterial("sprops/textures/sprops_metal5")
+            s:setParent(h)
+            
+            parts[i] = h
+            table.insert(holos, h)
+            table.insert(holos, s)
+        end
+        
+        
+        local head = holograms.create(chip:getPos() + Vector(0,0,6*scale*height_scale), Angle(), "models/holograms/hq_dome.mdl", Vector(1.2*scale, 1.2*scale, 3*scale))
+        //head:suppressEngineLighting(true)
+        head:setColor(Color(255,127,233))
+        head:setMaterial("sprops/trans/wheels/wheel_d_rim2")
+        head:setParent(parts[0])
+            
+        local head1 = holograms.create(chip:getPos() + Vector(0,0,6*scale*height_scale), Angle(), "models/holograms/hq_torus_thick.mdl", Vector(1.25*scale, 1.25*scale, 1.2*scale))
+        //head:suppressEngineLighting(true)
+        head1:setColor(Color(255,127,233))
+        head1:setMaterial("sprops/trans/wheels/wheel_d_rim2")
+        head1:setParent(parts[0])
+        
+        local ballL = holograms.create(chip:getPos() + Vector(3*scale,-8*scale,-6*scale*height_scale), Angle(), "models/holograms/hq_sphere.mdl", Vector(1.6*scale, 1.6*scale, 1.9*scale))
+        //head:suppressEngineLighting(true)
+        ballL:setColor(Color(250,212,174))
+        ballL:setMaterial("sprops/textures/sprops_metal5")
+        ballL:setParent(parts[#parts])
+        
+        local ballR = holograms.create(chip:getPos() + Vector(3*scale,8*scale,-6*scale*height_scale), Angle(), "models/holograms/hq_sphere.mdl", Vector(1.6*scale, 1.6*scale, 1.9*scale))
+        //head:suppressEngineLighting(true)
+        ballR:setColor(Color(250,212,174))
+        ballR:setMaterial("sprops/textures/sprops_metal5")
+        ballR:setParent(parts[#parts])
+        
+        table.insert(holos, head)
+        table.insert(holos, head1)
+        table.insert(holos, ballL)
+        table.insert(holos, ballR)
+        
+        local dick = parts[0]
+        
+        local target = chip
+        
+        hook.add("think", "", function()
+            
+            if owner_control then
+                moveManual()
+            else
+                move()
+            end
+            
+            for i = 1, len do
+                
+                local prv = parts[i-1]
+                local cur = parts[i]
+                
+                //prv:localToWorld(Vector(0,0,-6))
+                local n = cur:getPos() - prv:localToWorld(Vector(0,0,-6*scale*height_scale))
+                n:normalize()
+                
+                parts[i]:setPos(prv:localToWorld(Vector(0,0,-6*scale*height_scale)) + n*(6*scale*height_scale))
+                parts[i]:setAngles((prv:localToWorld(Vector(0,0,-6*scale*height_scale)) - cur:getPos()):getAngle() + Angle(90,0,0))
+                
+            end
+            
+        end)
+        
+        
+        function move()
+            if not target:isValid() then
+                target = chip
+                print("Target not valid, following SF Chip")
+            end
+            
+            local tarpos = target:getPos()
+            local dist = dick:getPos():getDistance(tarpos)
+            
+            if(dist < 600) then
+                tarpos:add(Vector(math.sin(timer.curtime()*1)*300, math.cos(timer.curtime()*1)*300, 80))
+            end
+            
+            local tarang = (tarpos - dick:getPos()):getAngle()
+            local ang = (dick:getAngles() + (tarang - dick:getAngles() + Angle(90,math.sin(timer.curtime()*5)* (dist > 500 and 20 or 45),0)))
+            --ang:normalize()
+            ang = angNorm(ang)
+            
+            dick:setAngles(ang)
+            dick:setPos(dick:getPos() + dick:getUp()* (dist > 500 and 15 or 5))
+            
+        end
+        
+        function moveManual()
+            if not owner():keyDown(IN_KEY.USE) then return end
+            if owner():getPos():getDistance(dick:getPos()) > 1000 then return end
+            
+            local tr = owner():getEyeTrace()
+            
+            local pos = tr.StartPos + tr.Normal*50
+            local ang = (pos - parts[3]:getPos()):getAngle() + Angle(90,0,0)
+            
+            dick:setPos(pos)
+            dick:setAngles(ang)
+            
+        end
+        
+        /*
+        print("Commands: ")
+        print("!follow <nickname>")
+        print("!follow chip")
+        print("!followid <id>")
+        print("!idlist")
+        */
+        
+        hook.add("PlayerSay", "", function(ply, text)
+            if ply != owner() then return end
+            
+            if string.sub(text, 1, 9) == "!followid" then
+                
+                local allPlayers = find.allPlayers()
+                local id = tonumber(string.sub(text, 11, #text))
+                
+                if allPlayers[id]:isValid() then
+                    target = allPlayers[id]
+                    print("Following: ".. target:getName())
+                    
+                    if show_only_target then sendToClients(target) end
+                    
+                else
+                    print("Invalid target!")
+                end
+                
+                
+                return false
+            end
+            
+            if string.sub(text, 1, 7) == "!follow" then
+                
+                local allPlayers = find.allPlayers()
+                local name = string.lower(string.sub(text, 9, #text))
+                
+                if name == "chip" then
+                    target = chip
+                    print("Following Starfall Chip")
+                    return false
+                end
+                
+                for id, p in pairs(allPlayers) do
+                    
+                    if string.find(string.lower(p:getName()), name) != nil then
+                        target = p
+                        print("Following: ".. target:getName())
+                        
+                        if show_only_target then sendToClients(target) end
+                        
+                        break
+                    end
+                    
+                end
+                
+                
+                return false
+            end
+                
+            if string.sub(text, 1, 7) == "!idlist" then
+                
+                for id, ply in pairs(find.allPlayers()) do
+                print("[".. id .."] ".. ply:getName())
+                end
+                return false
+            end
+            
+            
+            
+        end)
+        
+        
+        
+        function sendToClients(tar)
+            
+            timer.simple(1, function()
+            net.start("hide")
+            net.writeEntity(tar)
+            net.writeTable(holos)
+            net.send(owner())
+            
+        end)
+            
+        end
+        
+    else
+        
+        
+        
+    end
+    
+    
+    
+    
+    
+    
+    
+    
+    
