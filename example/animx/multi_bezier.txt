@@ -1,9 +1,9 @@
 --@name AnimX Example - Multi Bezier
 --@author Name
 --@client
---@include ../../lib/animx.lua
+--@include ../../lib/animx.txt
 
-local AnimX = require("../../lib/animx.lua")
+local AnimX = require("../../lib/animx.txt")
 hook.add("tick", "", AnimX.update)
 
 local count = 15

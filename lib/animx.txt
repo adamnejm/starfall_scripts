@@ -3,9 +3,8 @@
 --[[ TWEEN ]]--
 ---------------
 
---@include tween.lua
-
-local tween = require("tween.lua")
+--@include tween.txt
+local tween = require("tween.txt")
 
 
 
