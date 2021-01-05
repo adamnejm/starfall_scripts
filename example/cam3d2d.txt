@@ -1,0 +1,36 @@
+--@name Cam3D2D
+--@author Name
+--@client
+
+local chip, owner, lplayer, world = chip(), owner(), player(), entity(0)
+
+-------------------------------------------
+
+local iterations = 20
+local scale = 0.1
+local font = render.createFont("Roboto", 256, 400, true)
+
+hook.add("PreDrawOpaqueRenderables", "", function()
+    local m = chip:getMatrix()
+    m:translate(Vector(0, 0, 45))
+    m:setAngles((eyePos() - m:getTranslation()):getAngle() + Angle(90, 0, 0))
+    m:rotate(Angle(0, 90, 0))
+    m:setScale(Vector(scale, -scale))
+    
+    render.pushMatrix(m)
+        local textm = Matrix()
+        for i = 1, iterations do
+            render.pushMatrix(textm, true)
+                render.setColor(Color(245, 177, 29) / (iterations-i))
+                render.setFont(font)
+                render.drawSimpleText(0, 0, "FANCY", 1, 1)
+            render.popMatrix()
+            m:translate(Vector(0,-2))
+            m:scale(Vector(1.01))
+        end
+    render.popMatrix()
+end)
+
+if lplayer == owner then
+    render.setHUDActive(true)
+end
