@@ -6,9 +6,15 @@ local chip, owner, lplayer, world = chip(), owner(), player(), entity(0)
 
 -------------------------------------------
 
-local iterations = 20
+local iterations = 14
 local scale = 0.1
 local font = render.createFont("Roboto", 256, 400, true)
+
+-- Matrix formula:
+-- local m = Matrix()
+-- m:setAngles(Angle(0, 0, 0))
+-- m:setTranslation(Vector(0, 0, 0))
+-- m:setScale(Vector(scale, -scale))
 
 hook.add("PreDrawOpaqueRenderables", "", function()
     local m = chip:getMatrix()
@@ -17,18 +23,14 @@ hook.add("PreDrawOpaqueRenderables", "", function()
     m:rotate(Angle(0, 90, 0))
     m:setScale(Vector(scale, -scale))
     
-    render.pushMatrix(m)
-        local textm = Matrix()
-        for i = 1, iterations do
-            render.pushMatrix(textm, true)
-                render.setColor(Color(245, 177, 29) / (iterations-i))
-                render.setFont(font)
-                render.drawSimpleText(0, 0, "FANCY", 1, 1)
-            render.popMatrix()
-            m:translate(Vector(0,-2))
-            m:scale(Vector(1.01))
-        end
-    render.popMatrix()
+    for i = 1, iterations do
+        render.pushMatrix(m)
+            render.setColor(Color(245, 177, 29) / (iterations-i))
+            render.setFont(font)
+            render.drawSimpleText(0, 0, "FANCY", 1, 1)
+        render.popMatrix()
+        m:translate(Vector(1,-1))
+    end
 end)
 
 if lplayer == owner then
