@@ -1,0 +1,57 @@
+--@name Static Mesh
+--@author Name
+--@client
+
+local chip, owner, lplayer, world = chip(), owner(), player(), entity(0)
+
+-------------------------------------------
+
+local count_x, count_y = 32, 32
+local scale, uv_scale = 4, 5
+local mat = "phoenix_storms/ps_grass"
+
+local function z(x, y)
+    -- return math.rand(0, 5)
+    return (math.sin(x/4) + math.sin(y/4)) * 5
+end
+
+-------------------------------------------
+
+local grid = {}
+for x = 1, count_x do
+    grid[x] = {}
+    for y = 1, count_y do
+        grid[x][y] = {
+            u = x / uv_scale,
+            v = y / uv_scale,
+            pos = Vector(x*scale, y*scale, z(x, y))
+        }
+    end
+end
+
+local quad_offsets = {
+    { 0, 0 }, { 0, 1 }, { 1, 0 },
+    { 1, 1 }, { 1, 0 }, { 0, 1 },
+}
+
+local verts = {}
+for x = 1, count_x-1 do
+    for y = 1, count_y-1 do
+        for _, v in ipairs(quad_offsets) do
+            table.insert(verts, grid[x+v[1]][y+v[2]])
+        end
+    end
+end
+grid = nil
+
+mesh.generateNormals(verts, true, 0)
+mesh.generateTangents(verts)
+local obj = mesh.createFromTable(verts)
+
+local holo = holograms.create(chip:getPos(), Angle(), "models/holograms/cube.mdl")
+holo:setMesh(obj)
+holo:setMeshMaterial(material.load(mat))
+holo:setRenderBounds(-Vector(999), Vector(999))
+
+
+
