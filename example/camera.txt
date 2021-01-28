@@ -32,6 +32,12 @@ else
     -- We can then draw the RenderTarget to screen, thus rendering the view on screen
     render.createRenderTarget("view")
     
+    -- We also need to use appropriate shader 'gmodscreenspace'
+    local mat = material.create("gmodscreenspace")
+    -- Tell the material to use our 'view' RenderTarget as it's texture
+    mat:setTextureRenderTarget("$basetexture", "view")
+    
+    
     -- The main function of this script, executed by 'net.readEntity' callback
     -- The callback also provides us with the entity, 'camera' in this case
     local function init(camera)
@@ -40,6 +46,19 @@ else
         
         -- Now that the preparation stage is over, we can start setting up the rendering stuff
         
+        -- We technically could create a new table on every 'render.renderView'
+        -- That's inefficient though as only 'origin' and 'angles' parameters change
+        -- We can update those before we pass in this table to the function
+        local render_data = {
+            aspectratio = 1,
+            x = 0,
+            y = 0,
+            w = 1024,
+            h = 1024,
+            drawviewer = true,
+            drawviewmodel = false,
+        }
+        
         -- First hook needs to render the view
         hook.add("RenderScene", "", function()
             -- The line below limits the CPU usage to 50% as rendering view is rather expensive
@@ -47,23 +66,15 @@ else
             -- Implementing an FPS limit or lowering the resolution would be much better that this alone
             if quotaAverage() > quotaMax() * 0.5 then return end
             
-            
             -- Select the RenderTarget we'll be drawing to
             render.selectRenderTarget("view")
                 
-                render.renderView {
-                    origin = camera:getPos(),
-                    angles = camera:getAngles(),
-                    -- RenderTargets are square, so we're using 1:1 ratio
-                    aspectratio = 1,
-                    x = 0,
-                    y = 0,
-                    -- RenderTargets are 1024x1024 so we pass their width and height
-                    w = 1024,
-                    h = 1024,
-                    drawviewmodel = false,
-                    drawviewer = true,
-                }
+                -- Let's update our 'origin' and 'angles' keys as previously stated
+                render_data.origin = camera:getPos() + camera:getForward()*7
+                render_data.angles = camera:getAngles()
+                
+                -- Now we can finally render the view
+                render.renderView(render_data)
                 
             -- If you don't provide any argument in this function it will unselect the rendertarget
             render.selectRenderTarget()
@@ -72,9 +83,9 @@ else
         -- The hook above is already rendering the view to a RenderTarget
         -- To actually see the results on screen we need to draw that RenderTarget
         hook.add("Render", "", function()
-            -- I often prefer to use separate 'material' as it gives me more freedom manipulating properties
-            -- But for this, we can just use the RenderTarget directly
-            render.setRenderTargetTexture("view")
+            -- Select the previously created material
+            -- Remember that this material already uses our RenderTarget as the texture
+            render.setMaterial(mat)
             
             -- Even though the RenderTarget is 1024x1024, we draw it at half the size
             -- Note that it does not impact the quality, it's not like we're skipping any pixels
