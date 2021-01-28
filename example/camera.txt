@@ -1,0 +1,94 @@
+--@name Camera Example
+--@author Name
+--@shared
+
+local chip, owner, lplayer, world = chip(), owner(), player(), entity(0)
+
+-------------------------------------------
+
+if SERVER then
+    
+    -- If chip is placed on a screen, automatically link screen to the chip
+    local welded = chip:isWeldedTo()
+    if welded and welded:getClass() == "starfall_screen" then
+        welded:linkComponent(chip)
+    end
+    
+    -- Create the camera entity
+    local pos, ang = localToWorld(Vector(0, -20, 10), Angle(0,270,90), chip:getPos(), chip:getAngles())
+    local camera = prop.create(pos, ang, "models/dav0r/camera.mdl", true)
+    
+    -- Wait until other players initialize before sending the entity
+    hook.add("ClientInitialized", "", function(ply)
+        -- Send the camera entity to loaded player
+        net.start("Camera")
+            net.writeEntity(camera)
+        net.send(ply)
+    end)
+    
+else
+    
+    -- Create a RenderTarget that'll hold our rendered view
+    -- We can then draw the RenderTarget to screen, thus rendering the view on screen
+    render.createRenderTarget("view")
+    
+    -- The main function of this script, executed by 'net.readEntity' callback
+    -- The callback also provides us with the entity, 'camera' in this case
+    local function init(camera)
+        -- Print the confirmation that we received the entity, because why not
+        print(Color(255,255,255), "Received camera: ", Color(255,0,255), camera)
+        
+        -- Now that the preparation stage is over, we can start setting up the rendering stuff
+        
+        -- First hook needs to render the view
+        hook.add("RenderScene", "", function()
+            -- The line below limits the CPU usage to 50% as rendering view is rather expensive
+            -- It will assure that clients don't crash because their instance exceeds the quota
+            -- Implementing an FPS limit or lowering the resolution would be much better that this alone
+            if quotaAverage() > quotaMax() * 0.5 then return end
+            
+            
+            -- Select the RenderTarget we'll be drawing to
+            render.selectRenderTarget("view")
+                
+                render.renderView {
+                    origin = camera:getPos(),
+                    angles = camera:getAngles(),
+                    -- RenderTargets are square, so we're using 1:1 ratio
+                    aspectratio = 1,
+                    x = 0,
+                    y = 0,
+                    -- RenderTargets are 1024x1024 so we pass their width and height
+                    w = 1024,
+                    h = 1024,
+                    drawviewmodel = false,
+                    drawviewer = true,
+                }
+                
+            -- If you don't provide any argument in this function it will unselect the rendertarget
+            render.selectRenderTarget()
+        end)
+        
+        -- The hook above is already rendering the view to a RenderTarget
+        -- To actually see the results on screen we need to draw that RenderTarget
+        hook.add("Render", "", function()
+            -- I often prefer to use separate 'material' as it gives me more freedom manipulating properties
+            -- But for this, we can just use the RenderTarget directly
+            render.setRenderTargetTexture("view")
+            
+            -- Even though the RenderTarget is 1024x1024, we draw it at half the size
+            -- Note that it does not impact the quality, it's not like we're skipping any pixels
+            -- That's because even though screen size is 512x512, it's not represented in pixels.
+            render.drawTexturedRect(0, 0, 512, 512)
+        end)
+        
+    end
+    
+    -- Catch the network signal sent from server
+    net.receive("Camera", function()
+        -- Instead of reading the entity directly from 'net.readEntity', use callback
+        -- This helps with entity sometimes being invalid on client
+        net.readEntity(init)
+    end)
+    
+end
