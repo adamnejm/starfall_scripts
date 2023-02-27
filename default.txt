@@ -1,6 +1,6 @@
 --@name Generic
 --@author Name
---@
+--@server
 
 local chip, owner, lplayer, world = chip(), owner(), player(), entity(0)
 
